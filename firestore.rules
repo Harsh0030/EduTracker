@@ -1,0 +1,207 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // ===============================================================
+    // Assumed Data Model
+    // ===============================================================
+    //
+    // Collection: users
+    // Document ID: {userId}
+    // Fields:
+    //   - uid: string (required) - User's unique ID
+    //   - email: string (required, email format) - User's email
+    //   - displayName: string (optional) - User's display name
+    //   - role: string (required, enum: ['teacher', 'admin']) - User's role
+    //   - createdAt: string (required, date-time) - Creation timestamp
+    //
+    // Collection: students
+    // Document ID: {studentId}
+    // Fields:
+    //   - id: string (required) - Student's unique ID
+    //   - name: string (required) - Student's full name
+    //   - rollNumber: string (required) - Student's roll number
+    //   - standard: string (required) - Student's standard (e.g. 5th)
+    //   - division: string (required) - Student's division (e.g. A)
+    //   - createdAt: string (required, date-time) - Creation timestamp
+    //
+    // Collection: attendance
+    // Document ID: {attendanceId} (Format: {studentId}_{date})
+    // Fields:
+    //   - id: string (required) - Attendance unique ID
+    //   - studentId: string (required) - Reference to student
+    //   - standard: string (required) - Student's standard
+    //   - division: string (required) - Student's division
+    //   - subject: string (required) - Subject name
+    //   - date: string (required, format: YYYY-MM-DD) - Attendance date
+    //   - status: string (required, enum: ['present', 'absent']) - Attendance status
+    //   - markedBy: string (required) - UID of the teacher who marked it
+    //   - createdAt: string (required, date-time) - Creation timestamp
+    //
+    // Collection: savedReports
+    // Document ID: {reportId}
+    // Fields:
+    //   - id: string (required) - Report unique ID
+    //   - title: string (required) - Report title
+    //   - period: string (required) - Report period (e.g. "2024-03")
+    //   - type: string (required, enum: ['monthly', 'yearly']) - Report type
+    //   - standard: string (required) - Standard name
+    //   - division: string (required) - Division name
+    //   - subject: string (required) - Subject name
+    //   - stats: map (required) - Summary statistics
+    //   - studentData: list (required) - Detailed student records
+    //   - createdBy: string (required) - UID of the creator
+    //   - createdAt: string (required, date-time) - Creation timestamp
+    //
+    // ===============================================================
+
+    // ===============================================================
+    // Helper Functions
+    // ===============================================================
+    
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    function isAdmin() {
+      return isAuthenticated() && 
+        (
+          (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin') ||
+          request.auth.token.email == "eshaaniitian@gmail.com" ||
+          request.auth.token.email_verified == true && request.auth.token.email == "eshaaniitian@gmail.com"
+        );
+    }
+
+    function isTeacher() {
+      return isAuthenticated() && 
+        (
+          (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'teacher') || 
+          isAdmin()
+        );
+    }
+
+    function hasRequiredFields(fields) {
+      return request.resource.data.keys().hasAll(fields);
+    }
+
+    function hasOnlyAllowedFields(fields) {
+      return request.resource.data.keys().hasOnly(fields);
+    }
+
+    function isValidEmail(email) {
+      return email is string && email.matches("^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$");
+    }
+
+    function isValidDateString(dateStr) {
+      return dateStr is string && dateStr.matches("^\\d{4}-\\d{2}-\\d{2}$");
+    }
+
+    function isValidDateTimeString(dateTimeStr) {
+      return dateTimeStr is string && dateTimeStr.matches("^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}.*Z?$");
+    }
+
+    // ===============================================================
+    // Domain Validators
+    // ===============================================================
+
+    function isValidUser(data) {
+      return hasRequiredFields(['uid', 'email', 'role', 'createdAt']) &&
+             hasOnlyAllowedFields(['uid', 'email', 'displayName', 'role', 'createdAt', 'notificationSettings']) &&
+             data.uid == request.auth.uid &&
+             isValidEmail(data.email) &&
+             data.role in ['teacher', 'admin'] &&
+             isValidDateTimeString(data.createdAt);
+    }
+
+    function isValidStudent(data) {
+      return hasRequiredFields(['id', 'name', 'rollNumber', 'standard', 'division', 'createdAt']) &&
+             data.name is string && data.name.size() > 0 &&
+             data.rollNumber is string && data.rollNumber.size() > 0 &&
+             data.standard is string && data.standard.size() > 0 &&
+             data.division is string && data.division.size() > 0 &&
+             isValidDateTimeString(data.createdAt);
+    }
+
+    function isValidAttendance(data) {
+      return hasRequiredFields(['id', 'studentId', 'standard', 'division', 'subject', 'date', 'status', 'markedBy', 'createdAt']) &&
+             hasOnlyAllowedFields(['id', 'studentId', 'standard', 'division', 'subject', 'date', 'status', 'markedBy', 'createdAt']) &&
+             data.studentId is string &&
+             data.standard is string && data.standard.size() > 0 && data.standard.size() < 20 &&
+             data.division is string && data.division.size() > 0 && data.division.size() < 20 &&
+             data.subject is string && data.subject.size() > 0 && data.subject.size() < 50 &&
+             isValidDateString(data.date) &&
+             data.status in ['present' , 'absent'] &&
+             data.markedBy == request.auth.uid &&
+             isValidDateTimeString(data.createdAt);
+    }
+
+    function isValidSavedReport(data) {
+      return hasRequiredFields(['id', 'title', 'period', 'type', 'standard', 'division', 'subject', 'stats', 'studentData', 'createdBy', 'createdAt']) &&
+             hasOnlyAllowedFields(['id', 'title', 'period', 'type', 'standard', 'division', 'subject', 'stats', 'studentData', 'createdBy', 'createdAt']) &&
+             data.title is string && data.title.size() > 0 && data.title.size() < 100 &&
+             data.period is string &&
+             data.type in ['monthly', 'yearly'] &&
+             data.standard is string &&
+             data.division is string &&
+             data.subject is string &&
+             data.stats is map &&
+             data.studentData is list &&
+             data.createdBy == request.auth.uid &&
+             isValidDateTimeString(data.createdAt);
+    }
+
+    function isValidSubject(data) {
+      return hasRequiredFields(['name', 'standard', 'division', 'createdBy', 'createdAt']) &&
+             hasOnlyAllowedFields(['id', 'name', 'standard', 'division', 'createdBy', 'createdAt']) &&
+             data.name is string && data.name.size() > 0 && data.name.size() < 50 &&
+             data.standard is string && data.standard.size() > 0 &&
+             data.division is string && data.division.size() > 0 &&
+             data.createdBy == request.auth.uid &&
+             isValidDateTimeString(data.createdAt);
+    }
+
+    // ===============================================================
+    // Rules
+    // ===============================================================
+
+    match /users/{userId} {
+      allow read: if isOwner(userId) || isAdmin();
+      allow create: if isAuthenticated() && isValidUser(request.resource.data) && (request.resource.data.role == 'teacher' || isAdmin());
+      allow update: if isOwner(userId) && isValidUser(request.resource.data) && (request.resource.data.role == resource.data.role || isAdmin());
+    }
+
+    match /students/{studentId} {
+      allow read: if isAuthenticated();
+      allow create: if isTeacher() && isValidStudent(request.resource.data);
+      allow update: if isTeacher() && isValidStudent(request.resource.data);
+      allow delete: if isTeacher();
+    }
+
+    match /attendance/{attendanceId} {
+      allow read: if isAuthenticated();
+      allow create: if isTeacher() && isValidAttendance(request.resource.data);
+      allow update: if isTeacher() && isValidAttendance(request.resource.data);
+      allow delete: if isTeacher();
+    }
+
+    match /savedReports/{reportId} {
+      allow read: if isAuthenticated();
+      allow create: if isTeacher() && isValidSavedReport(request.resource.data);
+      allow delete: if isAdmin() || (isAuthenticated() && resource.data.createdBy == request.auth.uid);
+    }
+
+    match /subjects/{subjectId} {
+      allow read: if isAuthenticated();
+      allow create: if isTeacher() && isValidSubject(request.resource.data);
+      allow update: if isTeacher() && isValidSubject(request.resource.data) && (resource.data.createdBy == request.auth.uid || isAdmin());
+      allow delete: if isTeacher() && (resource.data.createdBy == request.auth.uid || isAdmin());
+    }
+
+    match /{path=**} {
+      allow read, write: if false;
+    }
+  }
+}

@@ -1,0 +1,5 @@
+{
+  "name": "Edutracker",
+  "description": "A professional Student Attendance & Record Management System with a modern Material Design UI, Firebase integration, and PDF/Excel reporting.",
+  "requestFramePermissions": []
+}

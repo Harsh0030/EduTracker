@@ -1,0 +1,130 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "User profile information",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "email": { "type": "string", "format": "email" },
+        "displayName": { "type": "string" },
+        "role": { "type": "string", "enum": ["teacher", "admin"] },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "notificationSettings": {
+          "type": "object",
+          "properties": {
+            "enabled": { "type": "boolean" },
+            "reminderTime": { "type": "string" },
+            "fcmToken": { "type": "string" }
+          }
+        }
+      },
+      "required": ["uid", "email", "role"]
+    },
+    "Student": {
+      "title": "Student",
+      "description": "Student record",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "rollNumber": { "type": "string" },
+        "standard": { "type": "string" },
+        "division": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["name", "rollNumber", "standard", "division"]
+    },
+    "Attendance": {
+      "title": "Attendance",
+      "description": "Attendance record for a student on a specific date",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "studentId": { "type": "string" },
+        "standard": { "type": "string" },
+        "division": { "type": "string" },
+        "subject": { "type": "string" },
+        "date": { "type": "string", "format": "date" },
+        "status": { "type": "string", "enum": ["present", "absent"] },
+        "markedBy": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["studentId", "standard", "division", "subject", "date", "status", "markedBy"]
+    },
+    "SavedReport": {
+      "title": "SavedReport",
+      "description": "A snapshot of an attendance report",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "title": { "type": "string" },
+        "period": { "type": "string" },
+        "type": { "type": "string", "enum": ["monthly", "yearly"] },
+        "standard": { "type": "string" },
+        "division": { "type": "string" },
+        "subject": { "type": "string" },
+        "stats": {
+          "type": "object",
+          "properties": {
+            "present": { "type": "number" },
+            "absent": { "type": "number" },
+            "total": { "type": "number" },
+            "percentage": { "type": "number" }
+          }
+        },
+        "studentData": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "name": { "type": "string" },
+              "present": { "type": "number" },
+              "absent": { "type": "number" },
+              "rate": { "type": "number" }
+            }
+          }
+        },
+        "createdBy": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["title", "period", "type", "standard", "division", "subject", "stats", "studentData", "createdBy", "createdAt"]
+    },
+    "Subject": {
+      "title": "Subject",
+      "description": "A subject taught in the school",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "standard": { "type": "string" },
+        "division": { "type": "string" },
+        "createdBy": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["name", "standard", "division", "createdBy", "createdAt"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "User",
+      "description": "User profiles"
+    },
+    "/students/{studentId}": {
+      "schema": "Student",
+      "description": "Student records"
+    },
+    "/attendance/{attendanceId}": {
+      "schema": "Attendance",
+      "description": "Attendance records"
+    },
+    "/savedReports/{reportId}": {
+      "schema": "SavedReport",
+      "description": "Saved attendance reports"
+    },
+    "/subjects/{subjectId}": {
+      "schema": "Subject",
+      "description": "School subjects"
+    }
+  }
+}
